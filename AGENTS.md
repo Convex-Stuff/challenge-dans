@@ -39,6 +39,51 @@ is missing. Changing the domain (dans.convex.coffee) or the proxy is done
 there, not here, and so is the box's firewall, which only admits Cloudflare:
 the site is unreachable unless Cloudflare proxies it.
 
+## UI: shadcn
+
+UI is built from shadcn components (`base-mira` style, on Base UI), vendored
+into `src/components/ui/` and configured by `components.json`. Follow the
+vendored skill in `.claude/skills/shadcn/` (pinned in `skills-lock.json`):
+
+- Use an existing component before writing custom markup: `Empty` (through
+  `EmptyState`) for empty lists, `Alert` for callouts, `Badge` rather than
+  styled spans, `Separator` rather than borders, `Spinner` for pending
+  buttons.
+- Style with semantic tokens (`bg-background`, `text-muted-foreground`),
+  never raw colours or `dark:` overrides; the palette lives in
+  `src/app/globals.css`, for both themes.
+- Custom triggers use Base UI's `render` prop, not Radix's `asChild`.
+- Add components with `bunx --bun shadcn@latest add <name>`, and read what it
+  wrote before using it.
+
+Pages go in `PageShell` (title, description, content width). The header
+renders the navigation in `src/config/site.ts`: adding a page means adding an
+entry there and creating the route.
+
+The theme is the `dark` class on `<html>`, dark by default; `src/lib/theme.ts`
+applies a saved choice before the first paint.
+
+## Typography
+
+Text uses Saira (`font-sans`, the default). Headings and titles use
+`font-heading`, which is Saira too for now, so a display font can be dropped
+in later by changing `--font-heading` in `globals.css` alone.
+
+## Errors
+
+Errors the app throws on purpose are classes in `src/lib/errors.ts`, all
+extending `AppError`, which carries the HTTP status to answer with:
+`NotFoundError`, `UnauthorizedError`, `ForbiddenError` and `ValidationError`
+(a message per field, for forms). Throw these from the data layer rather than
+bare `Error`s, and branch on them with `instanceof`, not on messages. Their
+messages are shown to users, so keep anything sensitive out of them. The
+module is client-safe.
+
+Classes are for things with state or identity, such as these errors and
+clients for external services. The data layer itself stays plain functions
+(below), which is what Next's Data Access Layer pattern and React's `cache()`
+expect.
+
 ## Data access
 
 All database access goes through `src/lib/data/`, following Next's Data
@@ -49,7 +94,9 @@ Access Layer pattern (`node_modules/next/dist/docs/01-app/02-guides/data-securit
 - Functions return small DTO types, never raw Prisma rows, so a result can be
   passed to any component without leaking fields.
 - Authorization happens inside the data layer, not only in pages: a
-  page-level check does not protect the server actions on it.
+  page-level check does not protect the server actions on it. Refuse with
+  `UnauthorizedError` / `ForbiddenError`, and report a missing record with
+  `NotFoundError`.
 - `"use server"` actions stay thin and delegate here.
 
 Nothing outside `src/lib/data/` imports `@/lib/prisma`. Standalone bun scripts

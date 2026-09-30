@@ -19,6 +19,21 @@ bun run dev            # http://localhost:3000
 `GET /api/health` returns `{"database":"ok"}` (200) when the app can reach
 Postgres, and 503 otherwise.
 
+## UI
+
+Components come from [shadcn/ui](https://ui.shadcn.com) (`base-mira` style,
+on Base UI) and live in [`src/components/ui/`](src/components/ui). Add more
+with:
+
+```bash
+bunx --bun shadcn@latest add <component>
+```
+
+Site name and navigation are in [`src/config/site.ts`](src/config/site.ts);
+the palette for both themes is in [`src/app/globals.css`](src/app/globals.css).
+Conventions for agents and contributors, including the vendored shadcn and
+Prisma skills, are in [`AGENTS.md`](AGENTS.md).
+
 ## Database
 
 Models live in [`prisma/schema.prisma`](prisma/schema.prisma), which has none

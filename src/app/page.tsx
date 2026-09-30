@@ -1,7 +1,13 @@
+import { ConstructionIcon } from "lucide-react";
+
+import { EmptyState } from "@/components/empty-state";
+import { PageShell } from "@/components/page-shell";
+import { siteConfig } from "@/config/site";
+
 export default function Home() {
   return (
-    <main className="flex min-h-screen items-center justify-center p-8">
-      <h1 className="text-4xl font-bold tracking-tight">challenge-dans</h1>
-    </main>
+    <PageShell title={siteConfig.name}>
+      <EmptyState icon={ConstructionIcon} title="Nothing here yet" />
+    </PageShell>
   );
 }

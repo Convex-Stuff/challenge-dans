@@ -11,8 +11,9 @@
 !.yarn/versions
 
 CLAUDE.md
-.claude/
-skills-lock.json
+# Vendored agent skills (skills-lock.json) are committed; the rest of .claude is local.
+.claude/*
+!.claude/skills/
 
 # testing
 /coverage
