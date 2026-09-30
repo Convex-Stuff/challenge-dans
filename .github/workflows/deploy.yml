@@ -1,0 +1,154 @@
+# Builds the app and migration images, pushes them to Docker Hub, then deploys
+# the compose stack over SSH - the same shape as united-states-suiji's.
+#
+#   * Two images are built from the one multi-stage Dockerfile (`runner` for the
+#     app, `migrator` for the one-shot migration job).
+#   * The box has no source checkout, so the compose file is copied over SCP.
+#   * The runner joins the tailnet as an ephemeral node and connects over it
+#     with an SSH key, so the box needs no publicly reachable SSH port.
+#
+# TLS for dans.convex.coffee is not handled here: the box's shared Caddy, in
+# the convex-infra repo, terminates it and proxies to `dans-app` over `edge`.
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  APP_IMAGE: ${{ secrets.DOCKER_USERNAME }}/${{ vars.SITE_NAME || 'challenge-dans' }}:latest
+  MIGRATE_IMAGE: ${{ secrets.DOCKER_USERNAME }}/${{ vars.SITE_NAME || 'challenge-dans' }}-migrate:latest
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3.6.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push app image
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runner
+          push: true
+          tags: ${{ env.APP_IMAGE }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push migration image
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: ./Dockerfile
+          target: migrator
+          push: true
+          tags: ${{ env.MIGRATE_IMAGE }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    # Required for the Tailscale action to request an OIDC token from GitHub.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # The runner is not on the tailnet by default, so it joins as an
+      # ephemeral node. This is what lets SSH_HOST be a tailnet address and
+      # keeps SSH off the public internet entirely.
+      - name: Connect to tailnet
+        uses: tailscale/github-action@v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+          # Peer propagation is eventually consistent; wait until the box is
+          # actually reachable rather than racing it in the next step.
+          ping: ${{ secrets.SSH_HOST }}
+
+      - name: Copy compose file to the server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          port: 22
+          source: "docker-compose.prod.yml"
+          target: ${{ vars.DEPLOY_PATH || 'apps/challenge-dans' }}
+
+      - name: Deploy with docker compose
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          port: 22
+          envs: APP_IMAGE,MIGRATE_IMAGE,DEPLOY_PATH,POSTGRES_USER,POSTGRES_DB,POSTGRES_PASSWORD
+          script: |
+            set -e
+            # DEPLOY_PATH is relative to the login home directory (scp-action
+            # does not expand `~`, so a tilde here would create a directory
+            # literally named "~"). Absolute paths also work.
+            mkdir -p "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
+
+            # Written fresh each deploy so the stack can also be restarted by
+            # hand on the box. umask keeps it unreadable to other users.
+            umask 077
+            {
+              echo "APP_IMAGE=$APP_IMAGE"
+              echo "MIGRATE_IMAGE=$MIGRATE_IMAGE"
+              echo "POSTGRES_USER=$POSTGRES_USER"
+              echo "POSTGRES_DB=$POSTGRES_DB"
+              echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+            } > .env
+
+            # Shared with the box's reverse proxy (convex-infra) and the other
+            # sites' stacks. No one project owns the network, so it is created
+            # here if missing: compose refuses to start without it.
+            docker network inspect edge >/dev/null 2>&1 || docker network create edge
+
+            docker compose -f docker-compose.prod.yml pull
+
+            # On failure, surface the logs of whatever went wrong. Compose only
+            # reports that a service exited non-zero, which is never enough to
+            # act on - the migration job in particular fails silently otherwise.
+            if ! docker compose -f docker-compose.prod.yml up -d --remove-orphans; then
+              echo "===== migrate logs ====="
+              docker compose -f docker-compose.prod.yml logs --no-color --tail 60 migrate || true
+              echo "===== app logs ====="
+              docker compose -f docker-compose.prod.yml logs --no-color --tail 30 app || true
+              exit 1
+            fi
+
+            docker image prune -f
+        env:
+          APP_IMAGE: ${{ env.APP_IMAGE }}
+          MIGRATE_IMAGE: ${{ env.MIGRATE_IMAGE }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || 'apps/challenge-dans' }}
+          # Not secret. The role and database are created when the Postgres
+          # volume is first initialised, so changing these later means
+          # recreating the volume.
+          POSTGRES_USER: ${{ vars.POSTGRES_USER || 'dans' }}
+          POSTGRES_DB: ${{ vars.POSTGRES_DB || 'dans' }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
