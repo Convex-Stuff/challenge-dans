@@ -85,9 +85,8 @@ happens in `convex-infra`:
 
 1. In Cloudflare, add a proxied DNS record for `dans` in the `convex.coffee`
    zone pointing at the box. The zone's SSL/TLS mode should be Full (strict).
-2. Create an origin certificate covering `dans.convex.coffee` (SSL/TLS →
-   Origin Server) and store it in `convex-infra`'s secrets as
-   `DANS_ORIGIN_CERT` / `DANS_ORIGIN_KEY`.
-3. Add a `dans.convex.coffee` block to `caddy/site/Caddyfile` proxying to
-   `dans-app:3000`, and write the two secrets to `certs/` in
-   `deploy-caddy.yml`, including its empty-value check.
+2. The certificate is the zone's wildcard (`*.convex.coffee`), shared with
+   every other `convex.coffee` site and stored in `convex-infra`'s secrets as
+   `CONVEX_COFFEE_ORIGIN_CERT` / `CONVEX_COFFEE_ORIGIN_KEY`. Nothing to create.
+3. `caddy/site/Caddyfile` has a `dans.convex.coffee` block proxying to
+   `dans-app:3000` with that certificate.
