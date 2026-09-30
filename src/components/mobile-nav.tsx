@@ -7,6 +7,7 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -18,6 +19,8 @@ import {
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { siteConfig, visibleNav } from "@/config/site";
+import { signInWithOsu } from "@/lib/auth-actions";
+import { getCurrentUser } from "@/lib/data/session";
 import { cn } from "@/lib/utils";
 
 // Every row in the menu: a full-width ghost button, left-aligned.
@@ -26,9 +29,12 @@ const itemClass = cn(buttonVariants({ variant: "ghost", size: "lg" }), itemLayou
 
 /**
  * The header's menu on screens too narrow for the full nav (below `lg`): the
- * nav links and the theme switch, in a sheet that slides in from the right.
+ * nav links, the theme switch, and Sign in for signed-out visitors, in a
+ * sheet that slides in from the right.
  */
-export function MobileNav() {
+export async function MobileNav() {
+  const viewer = await getCurrentUser();
+
   return (
     <Sheet>
       <Tooltip>
@@ -89,6 +95,18 @@ export function MobileNav() {
         <div className="px-4 pt-2">
           <ThemeToggle withLabel className={itemClass} />
         </div>
+
+        {/* Signed-in players sign out from their avatar menu in the header,
+            which works at every screen size. */}
+        {!viewer && (
+          <SheetFooter className="border-t">
+            <form action={signInWithOsu}>
+              <Button type="submit" className="h-10 w-full">
+                Sign in with osu!
+              </Button>
+            </form>
+          </SheetFooter>
+        )}
       </SheetContent>
     </Sheet>
   );

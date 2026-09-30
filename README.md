@@ -34,10 +34,59 @@ the palette for both themes is in [`src/app/globals.css`](src/app/globals.css).
 Conventions for agents and contributors, including the vendored shadcn and
 Prisma skills, are in [`AGENTS.md`](AGENTS.md).
 
+## Authentication (osu!)
+
+Sign-in uses [Auth.js](https://authjs.dev) (`next-auth` v5) with its built-in
+osu! OAuth provider, backed by database sessions in Postgres.
+
+### One-time setup
+
+osu! allows only one callback URL per OAuth application, so local and
+production need **separate applications**. Register them at
+[osu! account settings](https://osu.ppy.sh/home/account/edit#new-oauth-application).
+
+| | Callback URL | Credentials live in |
+| --- | --- | --- |
+| Local | `http://localhost:3000/api/auth/callback/osu` | `.env` |
+| Production | `https://dans.convex.coffee/api/auth/callback/osu` | repository secrets |
+
+Copy each application's client ID and secret into `AUTH_OSU_ID` and
+`AUTH_OSU_SECRET` for its environment, and set `AUTH_SECRET`
+(`openssl rand -base64 32`) - a different value in each.
+
+Mixing the pair - one application's id with another's secret - fails at the
+token exchange with `invalid_client`, after the osu! consent screen.
+
+### How it works
+
+`signIn("osu")` redirects to osu!, which returns to
+`/api/auth/callback/osu`. The Prisma adapter then creates a `User` row plus a
+linked `Account` row (`provider = "osu"`, `providerAccountId` = the osu! user
+id) and opens a `Session`. Returning users are matched on that `Account` pair,
+so they get the same `User` every time.
+
+osu! does not expose an email address, so `User.email` is nullable and stays
+`null`. Identity is carried by `User.osuId` (unique) and `User.osuUsername`,
+which are refreshed, with the avatar, on every sign-in.
+
+Pages and actions read the signed-in player through the data layer:
+
+```ts
+import { getCurrentUser, requireUser } from "@/lib/data/session";
+
+const viewer = await getCurrentUser(); // Viewer | null
+const player = await requireUser();    // throws UnauthorizedError if signed out
+```
+
+Config lives in [`src/auth.ts`](src/auth.ts); the route handler is
+[`src/app/api/auth/[...nextauth]/route.ts`](src/app/api/auth/%5B...nextauth%5D/route.ts).
+The header's Sign in button and avatar menu use the shared server actions in
+[`src/lib/auth-actions.ts`](src/lib/auth-actions.ts).
+
 ## Database
 
-Models live in [`prisma/schema.prisma`](prisma/schema.prisma), which has none
-yet. The generated client is written to `src/generated/prisma` and is
+Models live in [`prisma/schema.prisma`](prisma/schema.prisma); so far only
+the Auth.js models sign-in needs. The generated client is written to `src/generated/prisma` and is
 gitignored — `bun install` regenerates it via the `postinstall` hook.
 
 Pages and actions read the database through the data layer in
@@ -62,8 +111,11 @@ Both the app and the database run in containers. Migrations are applied by a
 one-shot `migrate` service that must exit successfully before the app starts.
 
 ```bash
-POSTGRES_USER=dans POSTGRES_DB=dans POSTGRES_PASSWORD=... docker compose -f docker-compose.prod.yml up -d --build
+POSTGRES_USER=dans POSTGRES_DB=dans POSTGRES_PASSWORD=... AUTH_SECRET=... AUTH_OSU_ID=... AUTH_OSU_SECRET=... AUTH_URL=https://dans.convex.coffee docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+Every one of these variables is required; compose fails fast with a message
+if any is missing.
 
 The image is built from [`Dockerfile`](Dockerfile) and serves Next.js in
 `standalone` mode. Bun installs dependencies and runs the server; the
@@ -85,6 +137,9 @@ starts the stack. It needs these repository settings:
 | `SSH_USERNAME` / `SSH_KEY` | secret | SSH login on the box |
 | `SSH_HOST_FINGERPRINT` | secret | The box's ECDSA host key fingerprint |
 | `POSTGRES_PASSWORD` | secret | Database password |
+| `AUTH_SECRET` | secret | Auth.js signing secret (`openssl rand -base64 32`) |
+| `AUTH_OSU_ID` / `AUTH_OSU_SECRET` | secret | The production osu! OAuth application |
+| `AUTH_URL` | variable, optional | Public origin, default `https://dans.convex.coffee` |
 | `SITE_NAME` | variable, optional | Image name, default `challenge-dans` |
 | `DEPLOY_PATH` | variable, optional | Stack directory on the box, default `apps/challenge-dans` |
 | `POSTGRES_USER` / `POSTGRES_DB` | variable, optional | Both default to `dans`; fixed once the volume is created |

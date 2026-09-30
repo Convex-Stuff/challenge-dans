@@ -103,7 +103,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
           port: 22
-          envs: APP_IMAGE,MIGRATE_IMAGE,DEPLOY_PATH,POSTGRES_USER,POSTGRES_DB,POSTGRES_PASSWORD
+          envs: APP_IMAGE,MIGRATE_IMAGE,DEPLOY_PATH,POSTGRES_USER,POSTGRES_DB,POSTGRES_PASSWORD,AUTH_SECRET,AUTH_OSU_ID,AUTH_OSU_SECRET,AUTH_URL
           script: |
             set -e
             # DEPLOY_PATH is relative to the login home directory (scp-action
@@ -121,6 +121,10 @@ jobs:
               echo "POSTGRES_USER=$POSTGRES_USER"
               echo "POSTGRES_DB=$POSTGRES_DB"
               echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+              echo "AUTH_SECRET=$AUTH_SECRET"
+              echo "AUTH_OSU_ID=$AUTH_OSU_ID"
+              echo "AUTH_OSU_SECRET=$AUTH_OSU_SECRET"
+              echo "AUTH_URL=$AUTH_URL"
             } > .env
 
             # Shared with the box's reverse proxy (convex-infra) and the other
@@ -152,3 +156,7 @@ jobs:
           POSTGRES_USER: ${{ vars.POSTGRES_USER || 'dans' }}
           POSTGRES_DB: ${{ vars.POSTGRES_DB || 'dans' }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_OSU_ID: ${{ secrets.AUTH_OSU_ID }}
+          AUTH_OSU_SECRET: ${{ secrets.AUTH_OSU_SECRET }}
+          AUTH_URL: ${{ vars.AUTH_URL || 'https://dans.convex.coffee' }}

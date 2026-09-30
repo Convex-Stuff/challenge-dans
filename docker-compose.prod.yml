@@ -2,8 +2,9 @@
 #
 #   docker compose -f docker-compose.prod.yml up -d --build
 #
-# Requires POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB to be set in the
-# environment (or a .env file next to this compose file). Migrations are
+# Requires POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB and the AUTH_*
+# variables to be set in the environment (or a .env file next to this compose
+# file). Migrations are
 # applied by the one-shot `migrate` service before the app starts.
 name: challenge-dans-prod
 
@@ -59,6 +60,13 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
+      AUTH_OSU_ID: ${AUTH_OSU_ID:?AUTH_OSU_ID must be set}
+      AUTH_OSU_SECRET: ${AUTH_OSU_SECRET:?AUTH_OSU_SECRET must be set}
+      # Public origin of the deployment, https://dans.convex.coffee. Auth.js
+      # builds its callback URLs from this, so it must match the callback URL
+      # registered with the osu! OAuth application.
+      AUTH_URL: ${AUTH_URL:?AUTH_URL must be set to the public origin}
     # No published ports. The box's reverse proxy, a separate stack in the
     # convex-infra repo, reaches the app over `edge` as `dans-app` - a bare
     # `app` would be ambiguous on a network other stacks share.

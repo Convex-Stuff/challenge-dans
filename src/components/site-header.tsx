@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MainNav } from "@/components/main-nav";
 import { MobileNav } from "@/components/mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserNav } from "@/components/user-nav";
 import { siteConfig, visibleNav } from "@/config/site";
 
 export function SiteHeader() {
@@ -23,6 +24,7 @@ export function SiteHeader() {
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <UserNav />
           {/* Below lg the switch lives in the mobile menu instead, to keep
               the header on one line. */}
           <ThemeToggle className="hidden lg:inline-flex" />

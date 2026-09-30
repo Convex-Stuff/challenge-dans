@@ -93,12 +93,23 @@ Access Layer pattern (`node_modules/next/dist/docs/01-app/02-guides/data-securit
   Client Component fails the build.
 - Functions return small DTO types, never raw Prisma rows, so a result can be
   passed to any component without leaking fields.
-- Authorization happens inside the data layer, not only in pages: a
-  page-level check does not protect the server actions on it. Refuse with
+- Authorization happens inside the data layer (`requireUser()` in
+  `session.ts`), not only in pages: a page-level check does not protect the
+  server actions on it. Refuse with
   `UnauthorizedError` / `ForbiddenError`, and report a missing record with
   `NotFoundError`.
 - `"use server"` actions stay thin and delegate here.
 
-Nothing outside `src/lib/data/` imports `@/lib/prisma`. Standalone bun scripts
+Nothing outside `src/lib/data/` imports `@/lib/prisma`, except `src/auth.ts`,
+because the Auth.js adapter needs the raw client. Standalone bun scripts
 can't import the data layer, since `server-only` fails outside Next, so they
 import `@/lib/prisma` directly.
+
+## Sign-in
+
+Players sign in with osu! through Auth.js (`src/auth.ts`), with database
+sessions. Read the signed-in player with `getCurrentUser()` or
+`requireUser()` from `src/lib/data/session.ts`, which return a small `Viewer`,
+never the Auth.js session itself. Sign-in and sign-out go through the shared
+actions in `src/lib/auth-actions.ts`. osu! has no email address, so a player
+is identified by `User.osuId`.

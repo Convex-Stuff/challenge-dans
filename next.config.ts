@@ -9,8 +9,9 @@ import type { NextConfig } from "next";
 const securityHeaders = [
   {
     key: "Content-Security-Policy",
+    // form-action allows osu.ppy.sh because signing in redirects there.
     value:
-      "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'",
+      "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self' https://osu.ppy.sh",
   },
   // frame-ancestors for browsers too old to read it.
   { key: "X-Frame-Options", value: "DENY" },
@@ -32,8 +33,9 @@ const nextConfig: NextConfig = {
   // Don't advertise the framework in every response.
   poweredByHeader: false,
   images: {
-    // The image optimizer stays off until something uses next/image, rather
-    // than leaving /_next/image open to fetch and decode images for anyone.
+    // Nothing uses next/image (avatars are plain <img> tags), so the image
+    // optimizer stays off rather than leaving /_next/image open to fetch and
+    // decode images for anyone who asks.
     unoptimized: true,
   },
   async headers() {
